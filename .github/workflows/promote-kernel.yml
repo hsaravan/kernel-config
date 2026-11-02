@@ -64,15 +64,54 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.SPAT }}
 
+      - name: Resolve triggering user
+        id: gh_user
+        env:
+          GH_TOKEN: ${{ secrets.SPAT }}
+        run: |
+        set -euo pipefail
+
+        ACTOR="${{ github.actor }}"
+
+        USER_JSON=$(gh api users/$ACTOR)
+
+        NAME=$(echo "$USER_JSON" | jq -r '.name // empty')
+        EMAIL=$(echo "$USER_JSON" | jq -r '.email // empty')
+
+        if [[ -z "$NAME" || "$NAME" == "null" ]]; then
+          NAME="$ACTOR"
+        fi
+
+        if [[ -z "$EMAIL" || "$EMAIL" == "null" ]]; then
+          EMAIL="${ACTOR}@users.noreply.github.com"
+        fi
+
+        echo "actor=$ACTOR" >> $GITHUB_OUTPUT
+        echo "name=$NAME" >> $GITHUB_OUTPUT
+        echo "email=$EMAIL" >> $GITHUB_OUTPUT
+
+        echo "User : $NAME"
+        echo "Email: $EMAIL"
+
       - name: Configure meta-qcom git identity and fork remote
         env:
           SPAT: ${{ secrets.SPAT }}
         run: |
+          set -euo pipefail
+
           cd meta-qcom
-          git config user.email "sgaud@qti.qualcomm.com"
-          git config user.name  "Salendarsingh Gaud"
-          git remote add sgaud-quic "https://x-access-token:${SPAT}@github.com/sgaud-quic/meta-qcom.git"
-          git fetch sgaud-quic
+
+          ACTOR="${{ steps.gh_user.outputs.actor }}"
+          NAME="${{ steps.gh_user.outputs.name }}"
+          EMAIL="${{ steps.gh_user.outputs.email }}"
+
+          git config user.name "$NAME"
+          git config user.email "$EMAIL"
+
+          git remote add actor-fork \
+            "https://x-access-token:${SPAT}@github.com/${ACTOR}/meta-qcom.git"
+
+          git fetch actor-fork || true
 
       - name: Resolve promotion branch
         env:
